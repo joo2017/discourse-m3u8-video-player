@@ -1,0 +1,4 @@
+plugins:
+  m3u8_video_player_enabled:
+    default: true
+    client: true
