@@ -10,39 +10,37 @@ register_asset 'stylesheets/m3u8-video-player.scss'
 
 after_initialize do
   if SiteSetting.m3u8_video_player_enabled
-    # 添加 Video.js CDN 链接
-    register_html_builder('server:before-head-close') do
-      "<link href='https://vjs.zencdn.net/7.20.3/video-js.min.css' rel='stylesheet'>"
+    # Video.js CDN 链接现在移动到客户端初始化器中
+
+    on(:before_head_close) do |controller|
+      controller.helpers.tag.link(href: "https://vjs.zencdn.net/7.20.3/video-js.min.css", rel: "stylesheet")
     end
 
-    register_html_builder('server:after-head-close') do
-      "<script src='https://vjs.zencdn.net/7.20.3/video.min.js'></script>"
+    on(:after_head_close) do |controller|
+      controller.helpers.tag.script(src: "https://vjs.zencdn.net/7.20.3/video.min.js")
     end
 
-    Onebox::Engine::VideoOnebox.class_eval do
-      matches_regexp(%r{^(https?:)?//.*\.(mov|mp4|webm|ogv|m3u8)(\?.*)?$}i)
+    module ::DiscourseMHLSPlayer
+      class Engine < ::Rails::Engine
+        engine_name "discourse_m3u8_player"
+        isolate_namespace DiscourseMHLSPlayer
+      end
+    end
 
+    require_dependency "onebox/engine/video_onebox"
+
+    class ::Onebox::Engine::VideoOnebox
       def to_html
-        if @url.match(%r{\.m3u8$})
-          random_id = "video-#{SecureRandom.hex(8)}"
+        if @url.match?(%r{\.m3u8(\?.*)?$}i)
           <<-HTML
-            <div class="onebox video-onebox videoWrap">
-              <video id='#{random_id}' class="video-js vjs-default-skin vjs-16-9" controls preload="auto" width="100%" data-setup='{"fluid": true}'>
+            <div class="onebox video-onebox">
+              <video class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" width="100%" height="100%" data-setup='{"fluid": true}'>
                 <source src="#{@url}" type="application/x-mpegURL">
               </video>
             </div>
           HTML
         else
-          # 原有的非 m3u8 文件处理代码
-          escaped_url = ::Onebox::Helpers.normalize_url_for_output(@url)
-          <<-HTML
-            <div class="onebox video-onebox">
-              <video width='100%' height='100%' controls #{@options[:disable_media_download_controls] ? 'controlslist="nodownload"' : ""}>
-                <source src='#{escaped_url}'>
-                <a href='#{escaped_url}'>#{@url}</a>
-              </video>
-            </div>
-          HTML
+          super
         end
       end
     end
